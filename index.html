@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- YouTube Origin Security Fix -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Arnav Singh Gadariya - YouTube Player</title>
+<link rel="preconnect" href="https://www.youtube.com">
+<style>
+:root{
+  --player-top: 8px;
+  --player-w: 470px;
+  --amber: #ffb02e;
+  --amber-dim: #7a5312;
+  --edge: 14px;
+}
+@property --ang{ syntax:'<angle>'; inherits:false; initial-value:150deg }
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#0b0b0d}
+body{
+  font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  color:#fff;
+}
+
+/* Background Image Setup */
+#bg{
+  position:fixed; inset:0; width:100%; height:100%;
+  object-fit:cover; object-position:center center;
+  animation:drift 40s ease-in-out infinite alternate;
+  z-index: 1;
+}
+@keyframes drift{ from{transform:scale(1.02)} to{transform:scale(1.08)} }
+
+#bg-fallback{
+  position:fixed; inset:0; z-index:0;
+  background:radial-gradient(120% 80% at 50% 20%, #2a3b2e 0%, #12151a 60%, #08090b 100%);
+}
+#vignette{
+  position:fixed; inset:0; pointer-events:none; z-index:2;
+  background:radial-gradient(130% 90% at 50% 45%, transparent 30%, rgba(0,0,0,.65) 100%);
+}
+
+/* Glass UI */
+.glass{
+  position:relative; isolation:isolate;
+  background:
+    linear-gradient(175deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.04) 45%, rgba(255,255,255,.09) 100%),
+    rgba(16,17,21,.36);
+  backdrop-filter:blur(30px) saturate(180%) brightness(.72);
+  -webkit-backdrop-filter:blur(30px) saturate(180%) brightness(.72);
+  box-shadow: 0 10px 34px -10px rgba(0,0,0,.6), 0 2px 10px -3px rgba(0,0,0,.35);
+}
+.glass::before{
+  content:""; position:absolute; inset:0; border-radius:inherit;
+  padding:1px; pointer-events:none; z-index:2;
+  background:linear-gradient(var(--ang), rgba(255,255,255,.9), rgba(255,255,255,.18) 28%, rgba(255,255,255,.04) 52%, rgba(255,255,255,.45));
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  animation:turn 18s linear infinite;
+}
+@keyframes turn{ to{--ang:510deg} }
+.glass > *{position:relative; z-index:3}
+
+/* Player UI */
+#deck{
+  position:fixed; z-index:10;
+  top:calc(var(--player-top) + env(safe-area-inset-top));
+  left:0; right:0; margin-inline:auto;
+  width:min(var(--player-w), calc(100vw - 16px));
+  border-radius:22px; padding:11px;
+  display:flex; gap:11px; align-items:center;
+  opacity:0; translate:0 -14px;
+  transition:opacity .6s ease, translate .6s cubic-bezier(.2,.8,.2,1);
+}
+#deck.ready{opacity:1; translate:0 0}
+
+#art{
+  width:52px; height:52px; flex:none; border-radius:13px; object-fit:cover;
+  background:rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.22), 0 2px 8px -2px rgba(0,0,0,.5);
+}
+
+#mid{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px}
+
+#screen{
+  position:relative; overflow:hidden; height:18px; border-radius:6px;
+  background:rgba(4,6,8,.62); padding:0 7px;
+  mask-image:linear-gradient(90deg,transparent,#000 10px,#000 calc(100% - 10px),transparent);
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 10px,#000 calc(100% - 10px),transparent);
+}
+#title{
+  position:absolute; top:50%; translate:0 -50%; white-space:nowrap;
+  font:600 10.5px/1 ui-monospace,monospace; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--amber); text-shadow:0 0 9px rgba(255,176,46,.55);
+}
+
+#bar{position:relative; height:14px; display:flex; align-items:center; cursor:pointer;}
+#bar::before{
+  content:""; position:absolute; left:0; right:0; height:3px; border-radius:2px;
+  background:rgba(255,255,255,.16);
+}
+#fill{
+  position:relative; height:3px; border-radius:2px; width:0%;
+  background:var(--amber); box-shadow:0 0 8px rgba(255,176,46,.6);
+  transition:width .1s linear;
+}
+
+#ctrls{display:flex; align-items:center; gap:2px; flex:none}
+button, a.btn-link{
+  background:none; border:0; cursor:pointer; color:#fff;
+  display:grid; place-items:center; border-radius:50%; text-decoration:none;
+  transition:background .18s, scale .12s;
+}
+button:active, a.btn-link:active{scale:.9}
+button:hover, a.btn-link:hover{background:rgba(255,255,255,.14)}
+.ico{width:34px; height:34px}
+#play{width:40px; height:40px; background:rgba(255,255,255,.17);}
+svg{width:16px; height:16px; fill:currentColor; display:block}
+#play svg{width:18px; height:18px}
+
+#eq{display:flex; align-items:flex-end; gap:2px; height:16px; padding:0 5px 0 2px; flex:none}
+#eq i{width:2.5px; border-radius:1px; background:var(--amber-dim); height:3px;}
+body.playing #eq i{
+  background:var(--amber);
+  animation:bounce var(--d) ease-in-out infinite alternate;
+}
+@keyframes bounce{from{height:3px} to{height:15px}}
+
+/* Hidden YouTube Player Iframe */
+#yt-player-container{position:fixed; width:1px; height:1px; left:-9999px; top:-9999px; opacity:0; pointer-events:none;}
+
+/* Instagram Button (Bottom Left) */
+#insta-btn{
+  position:fixed; z-index:12; left:var(--edge);
+  bottom:calc(var(--edge) + env(safe-area-inset-bottom));
+  width:44px; height:44px; border-radius:50%; color:rgba(255,255,255,.9);
+}
+
+/* Settings Panel (Bottom Right) */
+#gear{
+  position:fixed; z-index:12; right:var(--edge);
+  bottom:calc(var(--edge) + env(safe-area-inset-bottom));
+  width:44px; height:44px; border-radius:50%; color:rgba(255,255,255,.9);
+}
+
+#panel{
+  position:fixed; z-index:12; right:var(--edge);
+  bottom:calc(var(--edge) + 54px + env(safe-area-inset-bottom));
+  width:min(340px, calc(100vw - var(--edge) * 2));
+  border-radius:20px; padding:16px;
+  opacity:0; translate:0 12px; visibility:hidden;
+  transition:opacity .3s ease, translate .3s, visibility .3s;
+}
+#panel.open{opacity:1; translate:0 0; visibility:visible}
+
+.field label{
+  display:block; margin-bottom:5px; font:600 10px/1.4 ui-monospace,monospace;
+  letter-spacing:.13em; text-transform:uppercase; color:rgba(255,255,255,.62);
+}
+input[type=text]{
+  width:100%; padding:9px 11px; font:400 12px/1.3 ui-monospace,monospace; color:#fff;
+  background:rgba(4,6,8,.5); border:0; border-radius:10px; outline:none;
+}
+.btn{
+  width:100%; height:36px; border-radius:11px; margin-top:10px;
+  font:600 11px/1 ui-sans-serif,sans-serif;
+  background:rgba(255,176,46,.9); color:#231602; border:0; cursor:pointer;
+}
+
+#toast{
+  position:fixed; z-index:22; right:var(--edge);
+  bottom:calc(var(--edge) + 54px + env(safe-area-inset-bottom));
+  padding:9px 14px; border-radius:11px; font:600 11px/1.4 ui-sans-serif,sans-serif;
+  background:rgba(255,176,46,.95); color:#231602;
+  opacity:0; translate:0 8px; pointer-events:none; transition:opacity .25s, translate .25s;
+}
+#toast.show{opacity:1; translate:0 0}
+
+/* Loader */
+#loader{
+  position:fixed; inset:0; z-index:20; display:grid; place-items:center;
+  background:#0b0b0d; text-align:center; padding:24px; transition:opacity .8s, visibility .8s;
+}
+#loader.gone{opacity:0; visibility:hidden; pointer-events:none}
+#lbar{width:150px; height:2px; margin:20px auto 0; background:rgba(255,255,255,.13); overflow:hidden;}
+#lbar i{display:block; height:100%; width:38%; background:var(--amber); animation:slide 1.2s infinite;}
+@keyframes slide{ from{transform:translateX(-110%)} to{transform:translateX(300%)} }
+</style>
+</head>
+<body>
+
+<!-- Background Image Layer -->
+<div id="bg-fallback"></div>
+<img id="bg" alt="Background" src="1000089696.png" onerror="this.style.display='none'">
+<div id="vignette"></div>
+
+<!-- Audio Player Deck -->
+<div id="deck" class="glass">
+  <img id="art" alt="Track Artwork" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&auto=format&fit=crop&q=60">
+  <div id="mid">
+    <div id="screen"><div id="title">ARNAV SINGH GADARIYA</div></div>
+    <div id="bar"><div id="fill"></div></div>
+  </div>
+  <div id="eq"></div>
+  <div id="ctrls">
+    <button class="ico" id="prev" title="Previous"><svg viewBox="0 0 24 24"><path d="M7 5h2.5v14H7zM20 5v14L9.5 12z"/></svg></button>
+    <button id="play" title="Play"><svg id="play-i" viewBox="0 0 24 24"><path d="M7 4.5v15L20 12z"/></svg></button>
+    <button class="ico" id="next" title="Next"><svg viewBox="0 0 24 24"><path d="M17 5h-2.5v14H17zM4 5v14l10.5-7z"/></svg></button>
+  </div>
+</div>
+
+<div id="yt-player-container"><div id="yt-player"></div></div>
+
+<!-- Instagram Button (Bottom Left) -->
+<a id="insta-btn" class="glass btn-link" href="https://instagram.com/arnabhsinghgadariya" target="_blank" title="Instagram Profile">
+  <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+</a>
+
+<!-- Settings Gear (Bottom Right) -->
+<button id="gear" class="glass" title="Settings">
+  <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5zm7.4-2.6a7.6 7.6 0 0 0 0-1.8l2-1.5a.5.5 0 0 0 .1-.6l-1.9-3.2a.5.5 0 0 0-.6-.2l-2.3.9a7.3 7.3 0 0 0-1.6-.9l-.3-2.4a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.3 2.4a7.3 7.3 0 0 0-1.6.9l-2.3-.9a.5.5 0 0 0-.6.2L2.5 9a.5.5 0 0 0 .1.6l2 1.5a7.6 7.6 0 0 0 0 1.8l-2 1.5a.5.5 0 0 0-.1.6l1.9 3.2a.5.5 0 0 0 .6.2l2.3-.9a7.3 7.3 0 0 0 1.6.9l.3 2.4a.5.5 0 0 0 .5.4h3.8a.5.5 0 0 0 .5-.4l.3-2.4a7.3 7.3 0 0 0 1.6-.9l2.3.9a.5.5 0 0 0 .6-.2l1.9-3.2a.5.5 0 0 0-.1-.6z"/></svg>
+</button>
+
+<div id="panel" class="glass">
+  <div class="field">
+    <label for="f-playlist">YouTube Playlist ID</label>
+    <input type="text" id="f-playlist" placeholder="e.g. PLDISOm841rMcE3EaK8sM2s0I_t8H_cT6A" value="PLDISOm841rMcE3EaK8sM2s0I_t8H_cT6A">
+  </div>
+  <button class="btn" id="save">Load Playlist</button>
+</div>
+
+<div id="toast"></div>
+
+<div id="loader">
+  <div>
+    <h3 style="letter-spacing:2px;">LOADING MUSIC</h3>
+    <div id="lbar"><i></i></div>
+  </div>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+let DEFAULT_PLAYLIST_ID = 'PLDISOm841rMcE3EaK8sM2s0I_t8H_cT6A';
+
+let player;
+let isPlaying = false;
+let progressInterval;
+
+const eq = document.getElementById('eq');
+if(eq) {
+  for(let i=0; i<6; i++) {
+    const bar = document.createElement('i');
+    bar.style.setProperty('--d', (0.3 + i * 0.15) + 's');
+    eq.appendChild(bar);
+  }
+}
+
+const title = document.getElementById('title');
+const fill = document.getElementById('fill');
+const playI = document.getElementById('play-i');
+const playIcon = '<path d="M7 4.5v15L20 12z"/>';
+const pauseIcon = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('yt-player', {
+    height: '100%',
+    width: '100%',
+    playerVars: {
+      'listType': 'playlist',
+      'list': DEFAULT_PLAYLIST_ID,
+      'controls': 0,
+      'disablekb': 1,
+      'enablejsapi': 1,
+      'origin': window.location.origin
+    },
+    events: {
+      'onReady': onPlayerReady,
+      'onStateChange': onPlayerStateChange,
+      'onError': onPlayerError
+    }
+  });
+}
+
+function onPlayerReady(event) {
+  document.getElementById('loader').classList.add('gone');
+  document.getElementById('deck').classList.add('ready');
+  updateTrackInfo();
+}
+
+function onPlayerStateChange(event) {
+  if (event.data == YT.PlayerState.PLAYING) {
+    isPlaying = true;
+    document.body.classList.add('playing');
+    playI.innerHTML = pauseIcon;
+    updateTrackInfo();
+    startProgressBar();
+  } else {
+    isPlaying = false;
+    document.body.classList.remove('playing');
+    playI.innerHTML = playIcon;
+    clearInterval(progressInterval);
+  }
+}
+
+function onPlayerError(event) {
+  showToast("Track Restricted by YouTube");
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  if(toast) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+}
+
+function updateTrackInfo() {
+  if (player && player.getVideoData) {
+    const data = player.getVideoData();
+    if (data && data.title) {
+      title.textContent = data.title;
+      document.getElementById('art').src = `https://img.youtube.com/vi/${data.video_id}/mqdefault.jpg`;
+    }
+  }
+}
+
+function startProgressBar() {
+  clearInterval(progressInterval);
+  progressInterval = setInterval(() => {
+    if (player && player.getDuration) {
+      const currentTime = player.getCurrentTime();
+      const duration = player.getDuration();
+      if (duration > 0) {
+        fill.style.width = ((currentTime / duration) * 100) + '%';
+      }
+    }
+  }, 500);
+}
+
+document.getElementById('play').addEventListener('click', () => {
+  if (!player) return;
+  if (isPlaying) {
+    player.pauseVideo();
+  } else {
+    player.playVideo();
+  }
+});
+
+document.getElementById('prev').addEventListener('click', () => {
+  if (player) player.previousVideo();
+});
+
+document.getElementById('next').addEventListener('click', () => {
+  if (player) player.nextVideo();
+});
+
+document.getElementById('bar').addEventListener('click', (e) => {
+  if (!player || !player.getDuration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const clickX = e.clientX - rect.left;
+  const duration = player.getDuration();
+  if (duration > 0) {
+    player.seekTo((clickX / rect.width) * duration, true);
+  }
+});
+
+const gear = document.getElementById('gear');
+const panel = document.getElementById('panel');
+const fPlaylist = document.getElementById('f-playlist');
+const saveBtn = document.getElementById('save');
+
+gear.addEventListener('click', () => panel.classList.toggle('open'));
+
+saveBtn.addEventListener('click', () => {
+  const listId = fPlaylist.value.trim();
+  if (listId && player) {
+    player.loadPlaylist({ listType: 'playlist', list: listId });
+    panel.classList.remove('open');
+    showToast('New Playlist Loaded!');
+  }
+});
+</script>
+</body>
+</html>
